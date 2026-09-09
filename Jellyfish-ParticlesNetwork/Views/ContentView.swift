@@ -1,24 +1,25 @@
-//
-//  ContentView.swift
-//  Jellyfish-ParticlesNetwork
-//
-//  Created by Z.K   on 09/09/2026.
-//
-
 import SwiftUI
 
+// MARK: - ContentView
+// Root view of Jellyfish-ParticlesNetwork.
+// Provides a dark background and embeds the ParticleNetworkView.
+
 struct ContentView: View {
+
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+        ZStack {
+            // MARK: - Background
+            Color.black
+                .ignoresSafeArea() // Full-screen black background
+
+            // MARK: - Particle Network
+            ParticleNetworkView() // Main particle simulation view
         }
-        .padding()
+        .preferredColorScheme(.dark) // Force dark mode appearance
     }
 }
 
+// MARK: - Preview
 #Preview {
     ContentView()
 }
