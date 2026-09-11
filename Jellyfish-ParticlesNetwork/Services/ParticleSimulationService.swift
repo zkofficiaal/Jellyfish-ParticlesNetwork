@@ -1,5 +1,29 @@
+//
+//  ParticleSimulationService.swift
+//  Jellyfish-ParticlesNetwork
+//
+//  Created by Z.K   on 09/09/2026.
+//
+
 import CoreGraphics
 import Foundation
+
+// MARK: - Random CGFloat Helper
+
+private func randomCGFloat(
+    from minimum: CGFloat,
+    to maximum: CGFloat
+) -> CGFloat {
+    guard maximum > minimum else {
+        return minimum
+    }
+
+    return minimum +
+        CGFloat.random(in: 0...1) *
+        (maximum - minimum)
+}
+
+// MARK: - Particle Simulation Service
 
 final class ParticleSimulationService {
 
@@ -27,11 +51,16 @@ final class ParticleSimulationService {
 
     private var currentPointer: CGPoint?
 
-    private var randomSeed: CGFloat = CGFloat.random(
-        in: 0...1000
-    )
+    private var randomSeed: CGFloat =
+        randomCGFloat(
+            from: 0,
+            to: 1000
+        )
 
-    // MARK: - Configuration
+    private var jellyfishVelocity = CGVector(
+        dx: 35,
+        dy: -12
+    )
 
     private let configuration: ParticleConfiguration
 
@@ -48,33 +77,36 @@ final class ParticleSimulationService {
     func reset(
         size: CGSize
     ) {
-
         canvasSize = size
 
         lastUpdateTime = nil
-
         animationTime = 0
-
         wanderTimer = 0
 
         currentPointer = nil
-
         lastPointerPosition = nil
-
         pointerVelocity = .zero
+
+        jellyfishVelocity = CGVector(
+            dx: 35,
+            dy: -12
+        )
 
         particles.removeAll(
             keepingCapacity: true
         )
 
+        // Start slightly right of center,
+        // like the reference animation.
         jellyfishCenter = CGPoint(
-            x: size.width * 0.62,
-            y: size.height * 0.48
+            x: size.width * 0.60,
+            y: size.height * 0.52
         )
 
-        wanderTarget = randomWanderTarget(
-            size: size
-        )
+        wanderTarget =
+            randomWanderTarget(
+                size: size
+            )
 
         createParticles()
     }
@@ -83,68 +115,77 @@ final class ParticleSimulationService {
 
     private func createParticles() {
 
-        let backgroundCount = max(
-            0,
-            configuration.totalParticles -
-            configuration.coreParticles
-        )
+        // ---------------------------------------------------------
+        // Background
+        // ---------------------------------------------------------
 
-        // MARK: Background Particles
+        // Intentionally lower than configuration.totalParticles.
+        // This prevents the screen from becoming a huge network.
+        let backgroundCount = min(
+            max(
+                0,
+                configuration.totalParticles -
+                    configuration.coreParticles
+            ),
+            105
+        )
 
         for _ in 0..<backgroundCount {
 
             let position = CGPoint(
-                x: CGFloat.random(
-                    in: 0...max(canvasSize.width, 1)
+                x: randomCGFloat(
+                    from: 0,
+                    to: max(canvasSize.width, 1)
                 ),
-                y: CGFloat.random(
-                    in: 0...max(canvasSize.height, 1)
+                y: randomCGFloat(
+                    from: 0,
+                    to: max(canvasSize.height, 1)
                 )
             )
 
-            let angle = CGFloat.random(
-                in: 0...(CGFloat.pi * 2)
+            let angle = randomCGFloat(
+                from: 0,
+                to: CGFloat.pi * 2
             )
 
-            let speed = CGFloat.random(
-                in: 3...configuration.backgroundSpeed
-            )
-
-            let velocity = CGVector(
-                dx: cos(angle) * speed,
-                dy: sin(angle) * speed
+            let speed = randomCGFloat(
+                from: 2,
+                to: configuration.backgroundSpeed * 0.65
             )
 
             let particle = Particle(
-
                 position: position,
 
-                velocity: velocity,
-
-                radius: CGFloat.random(
-                    in:
-                    configuration.minimumRadius...
-                    configuration.maximumRadius
+                velocity: CGVector(
+                    dx: cos(angle) * speed,
+                    dy: sin(angle) * speed
                 ),
 
-                opacity: CGFloat.random(
-                    in:
-                    configuration.minimumOpacity...
-                    configuration.maximumOpacity
+                radius: randomCGFloat(
+                    from: 0.55,
+                    to: 1.35
                 ),
 
-                intensity: CGFloat.random(
-                    in: 0.35...1.0
+                opacity: randomCGFloat(
+                    from: 0.22,
+                    to: 0.68
                 ),
 
-                depth: CGFloat.random(
-                    in: 0.2...1.0
+                intensity: randomCGFloat(
+                    from: 0.35,
+                    to: 0.90
+                ),
+
+                depth: randomCGFloat(
+                    from: 0.2,
+                    to: 1.0
                 ),
 
                 isCore: false,
 
-                phase: CGFloat.random(
-                    in: 0...(CGFloat.pi * 2)
+                phase: randomCGFloat(
+                    from: 0,
+                    to: CGFloat.pi * 2
                 )
             )
 
@@ -153,64 +194,90 @@ final class ParticleSimulationService {
             )
         }
 
-        // MARK: Jellyfish Core
+        // ---------------------------------------------------------
+        // Jellyfish
+        // ---------------------------------------------------------
 
-        let bodyCount = Int(
-            CGFloat(configuration.coreParticles) * 0.55
+        // Much smaller than the previous version.
+        let bodyCount = min(
+            20,
+            configuration.coreParticles
         )
 
-        let tentacleCount = max(
-            1,
-            configuration.coreParticles - bodyCount
+        let tentacleCount = min(
+            36,
+            max(
+                1,
+                configuration.coreParticles -
+                    bodyCount
+            )
         )
 
-        // MARK: Body
+        // ---------------------------------------------------------
+        // Organic Body
+        // ---------------------------------------------------------
 
         for index in 0..<bodyCount {
 
             let normalizedIndex =
                 CGFloat(index) /
-                CGFloat(max(bodyCount - 1, 1))
+                CGFloat(
+                    max(
+                        bodyCount,
+                        1
+                    )
+                )
 
             let angle =
-                CGFloat.pi +
-                normalizedIndex * CGFloat.pi
+                normalizedIndex *
+                CGFloat.pi * 2
 
-            let radius = CGFloat.random(
-                in: 0.2...1.0
-            )
-
-            let initialTarget =
-                jellyfishCenter.adding(
-                    CGVector(
-                        dx: cos(angle) * 60 * radius,
-                        dy: sin(angle) * 45 * radius
+            // Dense toward the center,
+            // producing an organic cloud instead of a grid.
+            let radius =
+                sqrt(
+                    randomCGFloat(
+                        from: 0.05,
+                        to: 1.0
                     )
                 )
 
             let particle = Particle(
+                position:
+                    jellyfishCenter.adding(
+                        CGVector(
+                            dx:
+                                cos(angle) *
+                                38 *
+                                radius,
 
-                position: initialTarget,
+                            dy:
+                                sin(angle) *
+                                28 *
+                                radius
+                        )
+                    ),
 
-                velocity: CGVector(
-                    dx: 0,
-                    dy: 0
+                velocity: .zero,
+
+                radius: randomCGFloat(
+                    from: 0.8,
+                    to: 1.9
                 ),
 
-                radius: CGFloat.random(
-                    in: 1.0...2.6
+                opacity: randomCGFloat(
+                    from: 0.65,
+                    to: 1.0
                 ),
 
-                opacity: CGFloat.random(
-                    in: 0.65...1.0
+                intensity: randomCGFloat(
+                    from: 0.65,
+                    to: 1.0
                 ),
 
-                intensity: CGFloat.random(
-                    in: 0.7...1.0
-                ),
-
-                depth: CGFloat.random(
-                    in: 0.7...1.0
+                depth: randomCGFloat(
+                    from: 0.75,
+                    to: 1.0
                 ),
 
                 isCore: true,
@@ -223,8 +290,9 @@ final class ParticleSimulationService {
 
                 strandIndex: -1,
 
-                phase: CGFloat.random(
-                    in: 0...(CGFloat.pi * 2)
+                phase: randomCGFloat(
+                    from: 0,
+                    to: CGFloat.pi * 2
                 )
             )
 
@@ -233,28 +301,27 @@ final class ParticleSimulationService {
             )
         }
 
-        // MARK: Tentacles
+        // ---------------------------------------------------------
+        // Tendrils
+        // ---------------------------------------------------------
+
+        let strandCount = 8
+
+        let particlesPerStrand =
+            Int(
+                ceil(
+                    CGFloat(tentacleCount) /
+                    CGFloat(strandCount)
+                )
+            )
 
         for index in 0..<tentacleCount {
-
-            let strandCount = 6
 
             let strandIndex =
                 index % strandCount
 
             let progressIndex =
                 index / strandCount
-
-            let particlesPerStrand =
-                max(
-                    1,
-                    Int(
-                        ceil(
-                            CGFloat(tentacleCount) /
-                            CGFloat(strandCount)
-                        )
-                    )
-                )
 
             let progress =
                 CGFloat(progressIndex) /
@@ -271,46 +338,54 @@ final class ParticleSimulationService {
                     maximum: 1
                 )
 
-            let horizontalSpacing: CGFloat = 26
+            let strandPosition =
+                CGFloat(strandIndex) /
+                CGFloat(
+                    max(
+                        strandCount - 1,
+                        1
+                    )
+                )
 
             let baseX =
                 (
-                    CGFloat(strandIndex) -
-                    2.5
-                ) *
-                horizontalSpacing
+                    strandPosition -
+                    0.5
+                ) * 58
 
             let initialPosition =
                 jellyfishCenter.adding(
                     CGVector(
                         dx: baseX,
-                        dy: 25 + clampedProgress * 140
+                        dy:
+                            20 +
+                            clampedProgress * 105
                     )
                 )
 
             let particle = Particle(
-
                 position: initialPosition,
 
-                velocity: CGVector(
-                    dx: 0,
-                    dy: 0
+                velocity: .zero,
+
+                radius: randomCGFloat(
+                    from: 0.65,
+                    to: 1.55
                 ),
 
-                radius: CGFloat.random(
-                    in: 0.9...2.1
+                opacity: randomCGFloat(
+                    from: 0.45,
+                    to: 0.90
                 ),
 
-                opacity: CGFloat.random(
-                    in: 0.5...0.95
+                intensity: randomCGFloat(
+                    from: 0.45,
+                    to: 0.95
                 ),
 
-                intensity: CGFloat.random(
-                    in: 0.5...1.0
-                ),
-
-                depth: CGFloat.random(
-                    in: 0.6...1.0
+                depth: randomCGFloat(
+                    from: 0.65,
+                    to: 1.0
                 ),
 
                 isCore: true,
@@ -319,13 +394,17 @@ final class ParticleSimulationService {
 
                 coreRadius: 0,
 
-                coreProgress: clampedProgress,
+                coreProgress:
+                    clampedProgress,
 
-                strandIndex: strandIndex,
+                strandIndex:
+                    strandIndex,
 
-                phase: CGFloat.random(
-                    in: 0...(CGFloat.pi * 2)
-                )
+                phase:
+                    randomCGFloat(
+                        from: 0,
+                        to: CGFloat.pi * 2
+                    )
             )
 
             particles.append(
@@ -354,14 +433,19 @@ final class ParticleSimulationService {
         if let lastUpdateTime {
 
             let rawDelta =
-                time - lastUpdateTime
+                time -
+                lastUpdateTime
 
-            deltaTime = CGFloat(
-                min(
-                    max(rawDelta, 0),
-                    1.0 / 20.0
+            deltaTime =
+                CGFloat(
+                    min(
+                        max(
+                            rawDelta,
+                            0
+                        ),
+                        1.0 / 20.0
+                    )
                 )
-            )
 
         } else {
 
@@ -371,16 +455,19 @@ final class ParticleSimulationService {
 
         lastUpdateTime = time
 
-        animationTime += deltaTime
+        animationTime +=
+            deltaTime
 
         updatePointerVelocity()
 
         updateJellyfishCenter(
-            deltaTime: deltaTime
+            deltaTime:
+                deltaTime
         )
 
         updateParticles(
-            deltaTime: deltaTime
+            deltaTime:
+                deltaTime
         )
     }
 
@@ -389,17 +476,19 @@ final class ParticleSimulationService {
     func setPointer(
         _ position: CGPoint
     ) {
-
-        currentPointer = position
+        currentPointer =
+            position
     }
 
     func clearPointer() {
 
         currentPointer = nil
 
-        pointerVelocity = .zero
+        pointerVelocity =
+            .zero
 
-        lastPointerPosition = nil
+        lastPointerPosition =
+            nil
     }
 
     // MARK: - Pointer Velocity
@@ -424,7 +513,8 @@ final class ParticleSimulationService {
 
         let difference =
             lastPointerPosition.vector(
-                to: currentPointer
+                to:
+                    currentPointer
             )
 
         pointerVelocity =
@@ -435,131 +525,66 @@ final class ParticleSimulationService {
             currentPointer
     }
 
-    // MARK: - Jellyfish Center Physics
+    // MARK: - Jellyfish Movement
 
     private func updateJellyfishCenter(
         deltaTime: CGFloat
     ) {
 
-        var acceleration = CGVector(
-            dx: 0,
-            dy: 0
-        )
-
         if let pointer = currentPointer {
 
-            let difference =
+            // Track the pointer exactly — same displacement per frame,
+            // so the jellyfish moves at identical speed to the cursor
+            // instead of chasing it with acceleration/lag.
+
+            let displacement =
                 jellyfishCenter.vector(
                     to: pointer
                 )
 
-            let distance =
-                difference.length
+            jellyfishVelocity =
+                deltaTime > 0
+                ? displacement * (1 / deltaTime)
+                : .zero
 
-            if distance > 0.001 {
+            jellyfishCenter = pointer
 
-                let direction =
-                    difference.normalized
-
-                let influence =
-                    (
-                        1 -
-                        min(
-                            distance /
-                            configuration.cursorInfluenceRadius,
-                            1
-                        )
-                    )
-
-                let distanceFactor =
-                    0.55 +
-                    min(
-                        distance / 180,
-                        1.5
-                    )
-
-                acceleration =
-                    acceleration +
-                    direction *
-                    (
-                        configuration.cursorAttractionStrength *
-                        configuration.jellyfishAcceleration *
-                        distanceFactor *
-                        (0.45 + influence)
-                    )
-
-                // MARK: Cursor Velocity Influence
-
-                acceleration =
-                    acceleration +
-                    pointerVelocity *
-                    (
-                        configuration.cursorVelocityInfluence *
-                        configuration.jellyfishAcceleration
-                    )
-
-                // MARK: Overshoot
-
-                let velocityAlongTarget =
-                    dot(
-                        jellyfishVelocity,
-                        direction
-                    )
-
-                if distance < 150 &&
-                    velocityAlongTarget > 0 {
-
-                    let overshootForce =
-                        direction *
-                        (
-                            velocityAlongTarget *
-                            configuration.cursorOvershootStrength
-                        )
-
-                    acceleration =
-                        acceleration +
-                        overshootForce
-                }
-            }
-
-        } else {
-
-            updateWanderTarget(
-                deltaTime: deltaTime
-            )
-
-            let difference =
-                jellyfishCenter.vector(
-                    to: wanderTarget
-                )
-
-            let distance =
-                difference.length
-
-            if distance > 1 {
-
-                let direction =
-                    difference.normalized
-
-                acceleration =
-                    acceleration +
-                    direction *
-                    configuration.wanderAcceleration
-            }
+            return
         }
 
-        // MARK: Soft Screen Boundaries
+        var acceleration =
+            CGVector(
+                dx: 0,
+                dy: 0
+            )
 
-        acceleration =
-            acceleration +
-            boundaryForce()
+        updateWanderTarget(
+            deltaTime:
+                deltaTime
+        )
 
-        // MARK: Random Organic Motion
+        let difference =
+            jellyfishCenter.vector(
+                to:
+                    wanderTarget
+            )
+
+        if difference.length > 1 {
+
+            acceleration =
+                acceleration +
+                difference.normalized *
+                configuration.wanderAcceleration
+        }
+
+        // ---------------------------------------------------------
+        // Organic floating movement
+        // ---------------------------------------------------------
 
         let organicX =
             sin(
                 Double(
-                    animationTime * 0.65 +
+                    animationTime * 0.47 +
                     randomSeed
                 )
             )
@@ -567,27 +592,33 @@ final class ParticleSimulationService {
         let organicY =
             cos(
                 Double(
-                    animationTime * 0.52 +
-                    randomSeed * 1.73
+                    animationTime * 0.38 +
+                    randomSeed * 1.7
                 )
             )
 
         acceleration =
             acceleration +
             CGVector(
-                dx: CGFloat(organicX) * 18,
-                dy: CGFloat(organicY) * 18
+                dx:
+                    CGFloat(organicX) * 22,
+
+                dy:
+                    CGFloat(organicY) * 22
             )
 
-        // MARK: Apply Acceleration
+        // Soft boundaries.
+        acceleration =
+            acceleration +
+            boundaryForce()
 
+        // Apply acceleration.
         jellyfishVelocity =
             jellyfishVelocity +
             acceleration *
             deltaTime
 
-        // MARK: Damping
-
+        // Smooth damping.
         let damping =
             pow(
                 configuration.jellyfishDamping,
@@ -598,15 +629,11 @@ final class ParticleSimulationService {
             jellyfishVelocity *
             damping
 
-        // MARK: Maximum Velocity
-
         jellyfishVelocity =
             jellyfishVelocity.limited(
                 to:
-                configuration.jellyfishMaxSpeed
+                    configuration.jellyfishMaxSpeed
             )
-
-        // MARK: Move
 
         jellyfishCenter =
             jellyfishCenter +
@@ -614,27 +641,21 @@ final class ParticleSimulationService {
             deltaTime
     }
 
-    // MARK: - Jellyfish Velocity
-
-    private var jellyfishVelocity =
-        CGVector(
-            dx: 35,
-            dy: -12
-        )
-
     // MARK: - Wander
 
     private func updateWanderTarget(
         deltaTime: CGFloat
     ) {
 
-        wanderTimer += TimeInterval(
-            deltaTime
-        )
+        wanderTimer +=
+            TimeInterval(
+                deltaTime
+            )
 
         let distance =
             jellyfishCenter.distance(
-                to: wanderTarget
+                to:
+                    wanderTarget
             )
 
         if wanderTimer >=
@@ -645,7 +666,8 @@ final class ParticleSimulationService {
 
             wanderTarget =
                 randomWanderTarget(
-                    size: canvasSize
+                    size:
+                        canvasSize
                 )
         }
     }
@@ -654,17 +676,27 @@ final class ParticleSimulationService {
         size: CGSize
     ) -> CGPoint {
 
-        let margin: CGFloat = 180
+        let margin: CGFloat =
+            130
 
         return CGPoint(
+            x:
+                randomCGFloat(
+                    from:
+                        -margin,
+                    to:
+                        size.width +
+                        margin
+                ),
 
-            x: CGFloat.random(
-                in: -margin...(size.width + margin)
-            ),
-
-            y: CGFloat.random(
-                in: -margin...(size.height + margin)
-            )
+            y:
+                randomCGFloat(
+                    from:
+                        -margin,
+                    to:
+                        size.height +
+                        margin
+                )
         )
     }
 
@@ -673,7 +705,8 @@ final class ParticleSimulationService {
     private func boundaryForce()
         -> CGVector {
 
-        let margin: CGFloat = 180
+        let margin: CGFloat =
+            130
 
         var force =
             CGVector(
@@ -681,44 +714,58 @@ final class ParticleSimulationService {
                 dy: 0
             )
 
-        if jellyfishCenter.x < -margin {
+        if jellyfishCenter.x <
+            -margin {
 
             force.dx +=
-                (-margin - jellyfishCenter.x) *
-                0.7
+                (
+                    -margin -
+                    jellyfishCenter.x
+                ) * 0.8
         }
 
         if jellyfishCenter.x >
-            canvasSize.width + margin {
+            canvasSize.width +
+            margin {
 
             force.dx -=
                 (
                     jellyfishCenter.x -
-                    (canvasSize.width + margin)
-                ) * 0.7
+                    (
+                        canvasSize.width +
+                        margin
+                    )
+                ) * 0.8
         }
 
-        if jellyfishCenter.y < -margin {
+        if jellyfishCenter.y <
+            -margin {
 
             force.dy +=
-                (-margin - jellyfishCenter.y) *
-                0.7
+                (
+                    -margin -
+                    jellyfishCenter.y
+                ) * 0.8
         }
 
         if jellyfishCenter.y >
-            canvasSize.height + margin {
+            canvasSize.height +
+            margin {
 
             force.dy -=
                 (
                     jellyfishCenter.y -
-                    (canvasSize.height + margin)
-                ) * 0.7
+                    (
+                        canvasSize.height +
+                        margin
+                    )
+                ) * 0.8
         }
 
         return force
     }
 
-    // MARK: - Particles
+    // MARK: - Particle Updates
 
     private func updateParticles(
         deltaTime: CGFloat
@@ -733,14 +780,16 @@ final class ParticleSimulationService {
 
                 updateCoreParticle(
                     &particle,
-                    deltaTime: deltaTime
+                    deltaTime:
+                        deltaTime
                 )
 
             } else {
 
                 updateBackgroundParticle(
                     &particle,
-                    deltaTime: deltaTime
+                    deltaTime:
+                        deltaTime
                 )
             }
 
@@ -758,12 +807,14 @@ final class ParticleSimulationService {
 
         let target =
             targetPosition(
-                for: particle
+                for:
+                    particle
             )
 
         let difference =
             particle.position.vector(
-                to: target
+                to:
+                    target
             )
 
         let distance =
@@ -772,33 +823,35 @@ final class ParticleSimulationService {
         var acceleration =
             difference.normalized *
             min(
-                distance * 7,
-                950
+                distance * 8,
+                900
             )
 
-        // Organic movement
-
-        let noiseX =
+        // Soft independent motion.
+        let waveX =
             sin(
                 Double(
-                    animationTime * 1.4 +
+                    animationTime * 1.1 +
                     particle.phase
                 )
             )
 
-        let noiseY =
+        let waveY =
             cos(
                 Double(
-                    animationTime * 1.1 +
-                    particle.phase * 1.37
+                    animationTime * 0.85 +
+                    particle.phase * 1.31
                 )
             )
 
         acceleration =
             acceleration +
             CGVector(
-                dx: CGFloat(noiseX) * 20,
-                dy: CGFloat(noiseY) * 20
+                dx:
+                    CGFloat(waveX) * 14,
+
+                dy:
+                    CGFloat(waveY) * 14
             )
 
         particle.velocity =
@@ -808,7 +861,7 @@ final class ParticleSimulationService {
 
         let damping =
             pow(
-                0.91,
+                0.88,
                 deltaTime * 60
             )
 
@@ -818,7 +871,8 @@ final class ParticleSimulationService {
 
         particle.velocity =
             particle.velocity.limited(
-                to: 180
+                to:
+                    150
             )
 
         particle.position =
@@ -826,64 +880,67 @@ final class ParticleSimulationService {
             particle.velocity *
             deltaTime
 
-        // Dynamic particle intensity
-
+        // Gentle brightness pulse.
         let pulse =
             sin(
                 Double(
-                    animationTime * 2.1 +
+                    animationTime * 2.0 +
                     particle.phase
                 )
             )
 
         particle.intensity =
             (
-                0.75 +
-                CGFloat(pulse) * 0.18
+                0.72 +
+                CGFloat(pulse) * 0.20
             )
             .clamped(
-                minimum: 0.35,
-                maximum: 1.0
+                minimum:
+                    0.30,
+                maximum:
+                    1.0
             )
     }
 
-    // MARK: - Core Target Position
+    // MARK: - Organic Target Position
 
     private func targetPosition(
         for particle: Particle
     ) -> CGPoint {
 
+        // ---------------------------------------------------------
+        // BODY
+        // ---------------------------------------------------------
+
         if particle.strandIndex < 0 {
 
-            // MARK: Jellyfish Dome
-
-            let morph =
+            let breathing =
                 sin(
                     Double(
-                        animationTime * 0.85 +
+                        animationTime * 0.65 +
                         particle.phase
                     )
                 )
 
-            let secondaryMorph =
+            let secondary =
                 cos(
                     Double(
-                        animationTime * 0.53 +
-                        particle.phase * 0.7
+                        animationTime * 0.43 +
+                        particle.phase * 0.8
                     )
                 )
 
             let horizontalRadius =
                 (
-                    82 +
-                    CGFloat(morph) * 18
+                    36 +
+                    CGFloat(breathing) * 7
                 ) *
                 particle.coreRadius
 
             let verticalRadius =
                 (
-                    55 +
-                    CGFloat(secondaryMorph) * 13
+                    26 +
+                    CGFloat(secondary) * 5
                 ) *
                 particle.coreRadius
 
@@ -892,12 +949,11 @@ final class ParticleSimulationService {
                 CGFloat(
                     sin(
                         Double(
-                            animationTime * 0.45 +
+                            animationTime * 0.55 +
                             particle.phase
                         )
                     )
-                ) *
-                0.12
+                ) * 0.10
 
             let x =
                 cos(angle) *
@@ -905,8 +961,7 @@ final class ParticleSimulationService {
 
             let y =
                 sin(angle) *
-                verticalRadius -
-                10
+                verticalRadius
 
             return jellyfishCenter.adding(
                 CGVector(
@@ -916,7 +971,9 @@ final class ParticleSimulationService {
             )
         }
 
-        // MARK: Tentacles
+        // ---------------------------------------------------------
+        // TENDRILS
+        // ---------------------------------------------------------
 
         let progress =
             particle.coreProgress
@@ -926,18 +983,21 @@ final class ParticleSimulationService {
                 particle.strandIndex
             )
 
-        let strandBase =
-            (
-                strand -
-                2.5
-            ) *
-            29
+        let strandNormalized =
+            strand / 7.0
 
+        let baseX =
+            (
+                strandNormalized -
+                0.5
+            ) * 58
+
+        // Long organic wave.
         let wave =
             sin(
                 Double(
-                    progress * 4.5 +
-                    animationTime * 1.2 +
+                    progress * 4.2 +
+                    animationTime * 1.15 +
                     particle.phase
                 )
             )
@@ -945,41 +1005,45 @@ final class ParticleSimulationService {
         let secondaryWave =
             cos(
                 Double(
-                    progress * 2.7 +
-                    animationTime * 0.8 +
-                    particle.phase * 0.5
+                    progress * 2.3 +
+                    animationTime * 0.72 +
+                    particle.phase * 0.6
                 )
             )
 
-        let horizontalAmplitude =
-            8 +
-            progress * 28
+        // Tendrils spread more as they descend.
+        let spread =
+            7 +
+            progress * 35
 
         let x =
-            strandBase +
+            baseX +
             CGFloat(wave) *
-            horizontalAmplitude +
+            spread +
             CGFloat(secondaryWave) *
-            8
+            5
+
+        let verticalWave =
+            sin(
+                Double(
+                    animationTime * 0.9 +
+                    particle.phase
+                )
+            )
 
         let y =
-            30 +
-            progress * 205 +
-            CGFloat(
-                sin(
-                    Double(
-                        animationTime * 1.4 +
-                        particle.phase
-                    )
-                )
-            ) *
-            8 *
+            18 +
+            progress * 118 +
+            CGFloat(verticalWave) *
+            5 *
             progress
 
         return jellyfishCenter.adding(
             CGVector(
-                dx: x,
-                dy: y
+                dx:
+                    x,
+                dy:
+                    y
             )
         )
     }
@@ -997,25 +1061,26 @@ final class ParticleSimulationService {
                 dy: 0
             )
 
-        // Weak attraction toward the jellyfish.
-
+        // Very weak attraction.
         let difference =
             particle.position.vector(
-                to: jellyfishCenter
+                to:
+                    jellyfishCenter
             )
 
         let distance =
             difference.length
 
-        if distance > 20 &&
-            distance < 500 {
+        if distance > 30 &&
+            distance < 420 {
 
             let strength =
                 (
                     1 -
-                    distance / 500
+                    distance / 420
                 ) *
-                configuration.backgroundAcceleration
+                configuration.backgroundAcceleration *
+                0.35
 
             acceleration =
                 acceleration +
@@ -1023,12 +1088,11 @@ final class ParticleSimulationService {
                 strength
         }
 
-        // Organic drifting.
-
+        // Slow drifting.
         let noiseX =
             sin(
                 Double(
-                    animationTime * 0.25 +
+                    animationTime * 0.22 +
                     particle.phase
                 )
             )
@@ -1036,16 +1100,19 @@ final class ParticleSimulationService {
         let noiseY =
             cos(
                 Double(
-                    animationTime * 0.21 +
-                    particle.phase * 1.5
+                    animationTime * 0.18 +
+                    particle.phase * 1.4
                 )
             )
 
         acceleration =
             acceleration +
             CGVector(
-                dx: CGFloat(noiseX) * 5,
-                dy: CGFloat(noiseY) * 5
+                dx:
+                    CGFloat(noiseX) * 3,
+
+                dy:
+                    CGFloat(noiseY) * 3
             )
 
         particle.velocity =
@@ -1066,7 +1133,7 @@ final class ParticleSimulationService {
         particle.velocity =
             particle.velocity.limited(
                 to:
-                configuration.backgroundSpeed * 2
+                    configuration.backgroundSpeed
             )
 
         particle.position =
@@ -1074,42 +1141,47 @@ final class ParticleSimulationService {
             particle.velocity *
             deltaTime
 
-        // Soft screen wrapping.
-
         wrapParticle(
             &particle
         )
     }
 
-    // MARK: - Wrap Background Particle
+    // MARK: - Wrap
 
     private func wrapParticle(
         _ particle: inout Particle
     ) {
 
-        let margin: CGFloat = 20
+        let margin: CGFloat =
+            20
 
-        if particle.position.x < -margin {
+        if particle.position.x <
+            -margin {
 
             particle.position.x =
-                canvasSize.width + margin
+                canvasSize.width +
+                margin
         }
 
         if particle.position.x >
-            canvasSize.width + margin {
+            canvasSize.width +
+            margin {
 
             particle.position.x =
                 -margin
         }
 
-        if particle.position.y < -margin {
+        if particle.position.y <
+            -margin {
 
             particle.position.y =
-                canvasSize.height + margin
+                canvasSize.height +
+                margin
         }
 
         if particle.position.y >
-            canvasSize.height + margin {
+            canvasSize.height +
+            margin {
 
             particle.position.y =
                 -margin
@@ -1121,114 +1193,254 @@ final class ParticleSimulationService {
     func connections()
         -> [ParticleConnection] {
 
-        guard particles.count > 1 else {
-            return []
-        }
-
         var result:
             [ParticleConnection] = []
 
-        result.reserveCapacity(
-            particles.count * 3
-        )
+        let coreParticles =
+            particles.filter {
+                $0.isCore
+            }
 
-        for firstIndex in 0..<particles.count {
+        let backgroundParticles =
+            particles.filter {
+                !$0.isCore
+            }
 
-            let first =
-                particles[firstIndex]
+        // ---------------------------------------------------------
+        // Jellyfish Tendrils
+        // ---------------------------------------------------------
 
-            for secondIndex in
-                (firstIndex + 1)..<particles.count {
+        for strandIndex in 0..<8 {
+
+            let strandParticles =
+                coreParticles
+                    .filter {
+                        $0.strandIndex ==
+                            strandIndex
+                    }
+                    .sorted {
+                        $0.coreProgress <
+                            $1.coreProgress
+                    }
+
+            guard strandParticles.count > 1
+            else {
+                continue
+            }
+
+            for index in 0..<strandParticles.count - 1 {
+
+                let first =
+                    strandParticles[index]
 
                 let second =
-                    particles[secondIndex]
-
-                let distance =
-                    first.position.distance(
-                        to: second.position
-                    )
-
-                let maximumDistance:
-                    CGFloat =
-                    (
-                        first.isCore &&
-                        second.isCore
-                    )
-                    ?
-                    configuration.coreConnectionDistance
-                    :
-                    configuration.connectionDistance
-
-                guard distance <
-                    maximumDistance
-                else {
-                    continue
-                }
-
-                let distanceFactor =
-                    1 -
-                    distance /
-                    maximumDistance
-
-                let coreMultiplier:
-                    CGFloat =
-                    (
-                        first.isCore ||
-                        second.isCore
-                    )
-                    ? 1.35
-                    : 0.55
-
-                let opacity =
-                    distanceFactor *
-                    configuration.connectionOpacity *
-                    coreMultiplier
-
-                guard opacity > 0.015 else {
-                    continue
-                }
-
-                let width:
-                    CGFloat =
-                    (
-                        first.isCore &&
-                        second.isCore
-                    )
-                    ? 0.75
-                    : 0.35
+                    strandParticles[index + 1]
 
                 result.append(
                     ParticleConnection(
                         start:
                             first.position,
+
                         end:
                             second.position,
+
                         opacity:
-                            opacity.clamped(
-                                minimum: 0,
-                                maximum: 0.55
+                            0.42 *
+                            (
+                                1 -
+                                second.coreProgress * 0.35
                             ),
+
                         width:
-                            width
+                            0.45,
+
+                        isCoreConnection:
+                            true
                     )
                 )
             }
         }
 
+        // ---------------------------------------------------------
+        // Body Connections
+        // ---------------------------------------------------------
+
+        let bodyParticles =
+            coreParticles.filter {
+                $0.strandIndex < 0
+            }
+
+        if bodyParticles.count > 1 {
+
+            let sortedBody =
+                bodyParticles.sorted {
+                    $0.coreAngle <
+                        $1.coreAngle
+                }
+
+            // Only connect neighboring body particles.
+            // This prevents the old rectangular mesh.
+            for index in 0..<sortedBody.count {
+
+                let first =
+                    sortedBody[index]
+
+                let second =
+                    sortedBody[
+                        (index + 1) %
+                        sortedBody.count
+                    ]
+
+                result.append(
+                    ParticleConnection(
+                        start:
+                            first.position,
+
+                        end:
+                            second.position,
+
+                        opacity:
+                            0.32,
+
+                        width:
+                            0.40,
+
+                        isCoreConnection:
+                            true
+                    )
+                )
+            }
+        }
+
+        // ---------------------------------------------------------
+        // Body → Tendril Roots
+        // ---------------------------------------------------------
+
+        for strandIndex in 0..<8 {
+
+            guard let firstTendril =
+                coreParticles
+                    .filter({
+                        $0.strandIndex ==
+                            strandIndex
+                    })
+                    .min(by: {
+                        $0.coreProgress <
+                            $1.coreProgress
+                    })
+            else {
+                continue
+            }
+
+            guard let nearestBody =
+                bodyParticles.min(by: {
+                    $0.position.distance(
+                        to:
+                            firstTendril.position
+                    )
+                    <
+                    $1.position.distance(
+                        to:
+                            firstTendril.position
+                    )
+                })
+            else {
+                continue
+            }
+
+            result.append(
+                ParticleConnection(
+                    start:
+                        nearestBody.position,
+
+                    end:
+                        firstTendril.position,
+
+                    opacity:
+                        0.28,
+
+                    width:
+                        0.40,
+
+                    isCoreConnection:
+                        true
+                )
+            )
+        }
+
+        // ---------------------------------------------------------
+        // Background Connections
+        // ---------------------------------------------------------
+
+        // Very sparse background network.
+        // Only connect each particle to its closest nearby particle.
+        for particle in backgroundParticles {
+
+            var nearest:
+                Particle?
+
+            var nearestDistance:
+                CGFloat =
+                    58
+
+            for other in backgroundParticles {
+
+                if particle.id ==
+                    other.id {
+                    continue
+                }
+
+                let distance =
+                    particle.position.distance(
+                        to:
+                            other.position
+                    )
+
+                if distance <
+                    nearestDistance {
+
+                    nearestDistance =
+                        distance
+
+                    nearest =
+                        other
+                }
+            }
+
+            if let nearest {
+
+                // Prevent duplicate-looking connections
+                // by using ID ordering.
+                if particle.id.uuidString <
+                    nearest.id.uuidString {
+
+                    let factor =
+                        1 -
+                        nearestDistance /
+                        58
+
+                    result.append(
+                        ParticleConnection(
+                            start:
+                                particle.position,
+
+                            end:
+                                nearest.position,
+
+                            opacity:
+                                factor * 0.12,
+
+                            width:
+                                0.25,
+
+                            isCoreConnection:
+                                false
+                        )
+                    )
+                }
+            }
+        }
+
         return result
-    }
-
-    // MARK: - Math
-
-    private func dot(
-        _ first: CGVector,
-        _ second: CGVector
-    ) -> CGFloat {
-
-        return (
-            first.dx * second.dx
-        ) + (
-            first.dy * second.dy
-        )
     }
 }
